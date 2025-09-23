@@ -1,103 +1,299 @@
-import Image from "next/image";
+"use client";
+import React, { useState, useEffect, useCallback } from 'react';
+import { RefreshCw, Trophy, Skull } from 'lucide-react';
 
-export default function Home() {
+const WORD_LIST = [
+  'REACT', 'JAVASCRIPT', 'PROGRAMACAO', 'COMPUTADOR', 'TECNOLOGIA',
+  'ALGORITMO', 'DESENVOLVIMENTO', 'INTERFACE', 'RESPONSIVO', 'FRAMEWORK',
+  'COMPONENTE', 'FUNCAO', 'VARIAVEL', 'ARRAY', 'OBJETO',
+  'CLASSE', 'METODO', 'PROPRIEDADE', 'EVENTO', 'CALLBACK',
+  'PROMISE', 'ASYNC', 'AWAIT', 'FETCH', 'API',
+  'JSON', 'HTML', 'CSS', 'NODEJS', 'TYPESCRIPT',
+  'WEBPACK', 'BABEL', 'REDUX', 'HOOKS', 'STATE',
+  'PROPS', 'CONTEXT', 'EFFECT', 'MEMO', 'LAZY'
+];
+
+const MAX_WRONG_GUESSES = 6;
+
+const HangmanDrawing = ({ wrongGuessCount }) => {
+  const parts = [
+    // Base
+    <line key="base" x1="10" y1="190" x2="100" y2="190" stroke="white" strokeWidth="4" />,
+    // Pole
+    <line key="pole" x1="30" y1="190" x2="30" y2="20" stroke="white" strokeWidth="4" />,
+    // Top beam
+    <line key="top" x1="30" y1="20" x2="100" y2="20" stroke="white" strokeWidth="4" />,
+    // Noose
+    <line key="noose" x1="100" y1="20" x2="100" y2="40" stroke="white" strokeWidth="4" />,
+    // Head
+    <circle key="head" cx="100" cy="55" r="15" stroke="white" strokeWidth="4" fill="none" />,
+    // Body
+    <line key="body" x1="100" y1="70" x2="100" y2="140" stroke="white" strokeWidth="4" />
+  ];
+
   return (
-    <div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="font-mono list-inside list-decimal text-sm/6 text-center sm:text-left">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] font-mono font-semibold px-1 py-0.5 rounded">
-              app/page.js
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+    <svg width="150" height="200" className="mx-auto">
+      {parts.slice(0, wrongGuessCount)}
+    </svg>
+  );
+};
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+const Keyboard = ({ onLetterClick, usedLetters, correctLetters }) => {
+  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+  
+  return (
+    <div className="grid grid-cols-6 gap-2 max-w-md mx-auto">
+      {alphabet.split('').map(letter => {
+        const isUsed = usedLetters.includes(letter);
+        const isCorrect = correctLetters.includes(letter);
+        const isWrong = isUsed && !isCorrect;
+        
+        return (
+          <button
+            key={letter}
+            onClick={() => onLetterClick(letter)}
+            disabled={isUsed}
+            className={`
+              px-3 py-2 rounded-lg font-bold text-sm transition-all duration-200
+              ${isCorrect ? 'bg-green-500 text-white' : 
+                isWrong ? 'bg-red-500 text-white' : 
+                isUsed ? 'bg-gray-400 text-gray-600 cursor-not-allowed' :
+                'bg-blue-500 hover:bg-blue-600 text-white hover:scale-105 active:scale-95'}
+            `}
           >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+            {letter}
+          </button>
+        );
+      })}
+    </div>
+  );
+};
+
+const WordDisplay = ({ word, guessedLetters }) => {
+  return (
+    <div className="flex gap-2 justify-center flex-wrap">
+      {word.split('').map((letter, index) => (
+        <span
+          key={index}
+          className="text-4xl font-bold text-white border-b-4 border-white pb-2 w-12 text-center"
+        >
+          {guessedLetters.includes(letter) ? letter : '_'}
+        </span>
+      ))}
+    </div>
+  );
+};
+
+const GameStatus = ({ gameState, word, wrongGuesses }) => {
+  if (gameState === 'playing') return null;
+  
+  return (
+    <div className={`text-center p-6 rounded-lg ${
+      gameState === 'won' ? 'bg-green-500' : 'bg-red-500'
+    }`}>
+      <div className="text-white">
+        {gameState === 'won' ? (
+          <>
+            <Trophy className="w-16 h-16 mx-auto mb-4" />
+            <h2 className="text-3xl font-bold mb-2">🎉 PARABÉNS! 🎉</h2>
+            <p className="text-xl">Você adivinhou a palavra!</p>
+          </>
+        ) : (
+          <>
+            <Skull className="w-16 h-16 mx-auto mb-4" />
+            <h2 className="text-3xl font-bold mb-2">😵 GAME OVER 😵</h2>
+            <p className="text-xl mb-2">A palavra era:</p>
+            <p className="text-2xl font-bold">{word}</p>
+          </>
+        )}
+      </div>
+    </div>
+  );
+};
+
+export default function HangmanGame() {
+  const [currentWord, setCurrentWord] = useState('');
+  const [guessedLetters, setGuessedLetters] = useState([]);
+  const [wrongGuesses, setWrongGuesses] = useState(0);
+  const [gameState, setGameState] = useState('playing'); // 'playing', 'won', 'lost'
+
+  const initializeGame = useCallback(() => {
+    const randomWord = WORD_LIST[Math.floor(Math.random() * WORD_LIST.length)];
+    setCurrentWord(randomWord);
+    setGuessedLetters([]);
+    setWrongGuesses(0);
+    setGameState('playing');
+  }, []);
+
+  useEffect(() => {
+    initializeGame();
+  }, [initializeGame]);
+
+  useEffect(() => {
+    if (currentWord && gameState === 'playing') {
+      const wordLetters = new Set(currentWord.split(''));
+      const guessedWordLetters = new Set(guessedLetters.filter(letter => wordLetters.has(letter)));
+      
+      if (wordLetters.size === guessedWordLetters.size) {
+        setGameState('won');
+      } else if (wrongGuesses >= MAX_WRONG_GUESSES) {
+        setGameState('lost');
+      }
+    }
+  }, [currentWord, guessedLetters, wrongGuesses, gameState]);
+
+  const handleLetterGuess = (letter) => {
+    if (gameState !== 'playing' || guessedLetters.includes(letter)) {
+      return;
+    }
+
+    setGuessedLetters(prev => [...prev, letter]);
+
+    if (!currentWord.includes(letter)) {
+      setWrongGuesses(prev => prev + 1);
+    }
+  };
+
+  const handleKeyPress = useCallback((event) => {
+    const letter = event.key.toUpperCase();
+    if (letter.match(/[A-Z]/) && letter.length === 1) {
+      handleLetterGuess(letter);
+    }
+  }, [gameState, guessedLetters, currentWord]);
+
+  useEffect(() => {
+    window.addEventListener('keydown', handleKeyPress);
+    return () => window.removeEventListener('keydown', handleKeyPress);
+  }, [handleKeyPress]);
+
+  const correctLetters = guessedLetters.filter(letter => currentWord.includes(letter));
+  const wrongLetters = guessedLetters.filter(letter => !currentWord.includes(letter));
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 p-4">
+      <div className="max-w-4xl mx-auto">
+        {/* Header */}
+        <div className="text-center mb-8">
+          <h1 className="text-5xl font-bold text-white mb-4 drop-shadow-lg">
+            🎯 JOGO DA FORCA 🎯
+          </h1>
+          <p className="text-xl text-blue-200">
+            Adivinhe a palavra antes que o boneco seja enforcado!
+          </p>
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
+
+        {/* Game Stats */}
+        <div className="bg-black bg-opacity-30 rounded-lg p-4 mb-6">
+          <div className="flex justify-between items-center text-white">
+            <div className="text-center">
+              <p className="text-lg font-semibold">Tentativas Restantes</p>
+              <p className="text-3xl font-bold text-yellow-400">
+                {MAX_WRONG_GUESSES - wrongGuesses}
+              </p>
+            </div>
+            <div className="text-center">
+              <p className="text-lg font-semibold">Letras Corretas</p>
+              <p className="text-3xl font-bold text-green-400">
+                {correctLetters.length}
+              </p>
+            </div>
+            <div className="text-center">
+              <p className="text-lg font-semibold">Letras Erradas</p>
+              <p className="text-3xl font-bold text-red-400">
+                {wrongLetters.length}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="grid md:grid-cols-2 gap-8">
+          {/* Hangman Drawing */}
+          <div className="bg-black bg-opacity-50 rounded-lg p-6">
+            <h3 className="text-2xl font-bold text-white text-center mb-4">
+              Forca
+            </h3>
+            <HangmanDrawing wrongGuessCount={wrongGuesses} />
+          </div>
+
+          {/* Game Info */}
+          <div className="space-y-6">
+            {/* Word Display */}
+            <div className="bg-black bg-opacity-50 rounded-lg p-6">
+              <h3 className="text-2xl font-bold text-white text-center mb-6">
+                Palavra
+              </h3>
+              <WordDisplay word={currentWord} guessedLetters={guessedLetters} />
+            </div>
+
+            {/* Used Letters */}
+            <div className="bg-black bg-opacity-50 rounded-lg p-4">
+              <h4 className="text-lg font-bold text-white mb-3">Letras Utilizadas:</h4>
+              <div className="flex gap-2 flex-wrap">
+                {correctLetters.map(letter => (
+                  <span
+                    key={`correct-${letter}`}
+                    className="px-3 py-1 bg-green-500 text-white rounded-full text-sm font-bold"
+                  >
+                    {letter}
+                  </span>
+                ))}
+                {wrongLetters.map(letter => (
+                  <span
+                    key={`wrong-${letter}`}
+                    className="px-3 py-1 bg-red-500 text-white rounded-full text-sm font-bold"
+                  >
+                    {letter}
+                  </span>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Game Status */}
+        <div className="my-8">
+          <GameStatus gameState={gameState} word={currentWord} wrongGuesses={wrongGuesses} />
+        </div>
+
+        {/* Keyboard */}
+        <div className="bg-black bg-opacity-50 rounded-lg p-6 mb-6">
+          <h3 className="text-2xl font-bold text-white text-center mb-6">
+            Teclado Virtual
+          </h3>
+          <Keyboard
+            onLetterClick={handleLetterGuess}
+            usedLetters={guessedLetters}
+            correctLetters={correctLetters}
           />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
+          <p className="text-center text-blue-200 mt-4 text-sm">
+            💡 Dica: Você também pode usar o teclado físico!
+          </p>
+        </div>
+
+        {/* Restart Button */}
+        <div className="text-center">
+          <button
+            onClick={initializeGame}
+            className="bg-yellow-500 hover:bg-yellow-600 text-black font-bold py-4 px-8 rounded-lg text-xl transition-all duration-200 hover:scale-105 active:scale-95 flex items-center gap-3 mx-auto"
+          >
+            <RefreshCw className="w-6 h-6" />
+            Novo Jogo
+          </button>
+        </div>
+
+        {/* Instructions */}
+        <div className="bg-black bg-opacity-30 rounded-lg p-6 mt-8">
+          <h3 className="text-xl font-bold text-white mb-3">Como Jogar:</h3>
+          <ul className="text-blue-200 space-y-2">
+            <li>🎯 Adivinhe a palavra letra por letra</li>
+            <li>✅ Letras corretas aparecem na palavra</li>
+            <li>❌ Letras erradas desenham o boneco na forca</li>
+            <li>🏆 Ganhe descobrindo a palavra completa</li>
+            <li>💀 Perca se o boneco for completamente desenhado</li>
+            <li>⌨️ Use o teclado virtual ou físico para jogar</li>
+          </ul>
+        </div>
+      </div>
     </div>
   );
 }
